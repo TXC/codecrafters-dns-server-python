@@ -1,7 +1,8 @@
 import socket
-from app.dns.header import Header, MessageType
-from app.dns.question import Question, QClass, QType
+from app.dns.types import QType, QClass, MessageType
+from app.dns.header import Header
 from app.dns.message import Message
+from app.dns.record import Question, Record
 
 
 def main():
@@ -21,7 +22,20 @@ def main():
                 qclass=QClass.IN
             )
 
-            message = Message(header=header, questions=[question])
+            answer: Record = Record(
+                qname='codecrafters.io',
+                qtype=QType.A,
+                qclass=QClass.IN,
+                ttl=60,
+                rdlength=4,
+                rdata='8.8.8.8'
+            )
+
+            message = Message(
+                header=header,
+                questions=[question],
+                answers=[answer]
+            )
 
             udp_socket.sendto(message.serialize(), source)
         except Exception as e:
