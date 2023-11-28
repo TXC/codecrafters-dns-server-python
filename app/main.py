@@ -13,7 +13,7 @@ def main():
         try:
             buf, source = udp_socket.recvfrom(512)
 
-            header: Header = Header.empty()
+            header: Header = Header.from_bytes(buf)
             header.flags.qr = MessageType.Response
 
             question: Question = Question(
