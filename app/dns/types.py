@@ -1,10 +1,13 @@
 import enum
+from typing import NewType
+
+DomainName = NewType('DomainName', str)
+CharacterString = NewType('CharacterString', str)
 
 
-Label = str
+class RClass(enum.Enum):
+    """Record Class"""
 
-
-class QClass(enum.Enum):
     #: the Internet
     IN = 1
 
@@ -19,54 +22,122 @@ class QClass(enum.Enum):
     HS = 4
 
 
-class QType(enum.Enum):
-    # a host address
+class QClass(enum.Enum):
+    """Query Class"""
+
+    #: Any class
+    ANY = 255
+
+
+class RType(enum.Enum):
+    """Record Type"""
+
+    #: a host address
     A = 1
 
-    # an authoritative name server
+    #: an authoritative name server
     NS = 2
 
-    # a mail destination (Obsolete - use MX)
+    #: a mail destination (Obsolete - use MX)
     MD = 3
 
-    # a mail forwarder (Obsolete - use MX)
+    #: a mail forwarder (Obsolete - use MX)
     MF = 4
 
-    # the canonical name for an alias
+    #: the canonical name for an alias
     CNAME = 5
 
-    # marks the start of a zone of authority
+    #: marks the start of a zone of authority
     SOA = 6
 
-    # a mailbox domain name (EXPERIMENTAL)
+    #: a mailbox domain name (EXPERIMENTAL)
     MB = 7
 
-    # a mail group member (EXPERIMENTAL)
+    #: a mail group member (EXPERIMENTAL)
     MG = 8
 
-    # a mail rename domain name (EXPERIMENTAL)
+    #: a mail rename domain name (EXPERIMENTAL)
     MR = 9
 
-    # a null RR (EXPERIMENTAL)
+    #: a null RR (EXPERIMENTAL)
     NULL = 10
 
-    # a well known service description
+    #: a well known service description
     WKS = 11
 
-    # a domain name pointer
+    #: a domain name pointer
     PTR = 12
 
-    # host information
+    #: host information
     HINFO = 13
 
-    # mailbox or mail list information
+    #: mailbox or mail list information
     MINFO = 14
 
-    # mail exchange
+    #: mail exchange
     MX = 15
 
-    # text strings
+    #: text strings
     TXT = 16
+
+    #: Information about the responsible person(s) for the domain.
+    #: Usually an email address with the @ replaced by a .
+    RP = 17
+
+    AFSDB = 18
+    SIG = 24
+    KEY = 25
+    AAAA = 28
+    LOC = 29
+    SRV = 33
+    NAPTR = 35
+    KX = 36
+    CERT = 37
+    DNAME = 39
+    APL = 42
+    DS = 43
+    SSHFP = 44
+    IPSECKEY = 45
+    RRSIG = 46
+    NSEC = 47
+    DNSKEY = 48
+    DHCID = 49
+    NSEC3 = 50
+    NSEC3PARAM = 51
+    TLSA = 52
+    SMIMEA = 53
+    HIP = 55
+    CDS = 59
+    CDNSKEY = 60
+    OPENPGPKEY = 61
+    CSYNC = 62
+    ZONEMD = 63
+    SVCB = 64
+    HTTPS = 65
+    EUI48 = 108
+    EUI64 = 109
+    TKEY = 249
+    TSIG = 250
+    URI = 256
+    CAA = 257
+    TA = 32768
+    DLV = 32769
+
+
+class QType(enum.Enum):
+    """Query Class"""
+
+    #: A request for a transfer of an entire zone
+    AXFR = 252
+
+    #: A request for mailbox-related records (MB, MG or MR)
+    MAILB = 253
+
+    #: A request for mail agent RRs (Obsolete - see MX)
+    MAILA = 254
+
+    #: A request for all records
+    ANY = 255
 
 
 class MessageType(enum.Enum):

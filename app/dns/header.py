@@ -1,4 +1,6 @@
 import struct
+import logging
+import copy
 from dataclasses import dataclass, field
 from app.dns.types import MessageType, OpCode, ResponseCode
 
@@ -51,6 +53,20 @@ class HeaderFlags:
 
     def __bytes__(self) -> bytes:
         return self.serialize()
+
+    def __copy__(self) -> 'HeaderFlags':
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.qr = MessageType(self.qr.value)
+        result.opcode = OpCode(self.opcode.value)
+        result.aa = self.aa
+        result.tc = self.tc
+        result.rd = self.rd
+        result.ra = self.ra
+        result.z = self.z
+        result.rcode = ResponseCode(self.rcode.value)
+
+        return result
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "HeaderFlags":
@@ -128,6 +144,18 @@ class Header:
     def __bytes__(self) -> bytes:
         return self.serialize()
 
+    def __copy__(self) -> 'Header':
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.id = self.id
+        result.flags = copy.copy(self.flags)
+        result.qdcount = self.qdcount
+        result.ancount = self.ancount
+        result.nscount = self.nscount
+        result.arcount = self.arcount
+
+        return result
+
     @classmethod
     def from_bytes(cls, data: bytes) -> "Header":
         #: big endian
@@ -145,8 +173,12 @@ class Header:
 
     @classmethod
     def empty(cls) -> "Header":
+        import random
+        _id = random.randint(0x0000, 0xFFFF)
+
+        logging.info('Creating empty Header with ID: {_id}')
         return cls(
-            id=1234,
+            id=_id,
             flags=HeaderFlags.empty(),
             qdcount=0,
             ancount=0,

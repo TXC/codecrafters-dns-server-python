@@ -1,8 +1,5 @@
 import socket
-from app.dns.types import QType, QClass, MessageType
-from app.dns.header import Header
 from app.dns.message import Message
-from app.dns.record import Question, Record
 
 
 def main():
@@ -13,31 +10,11 @@ def main():
         try:
             buf, source = udp_socket.recvfrom(512)
 
-            header: Header = Header.from_bytes(buf)
-            header.flags.qr = MessageType.Response
+            message: Message = Message.from_bytes(buf)
 
-            question: Question = Question(
-                qname='codecrafters.io',
-                qtype=QType.A,
-                qclass=QClass.IN
-            )
+            response = message.create_response()
 
-            answer: Record = Record(
-                qname='codecrafters.io',
-                qtype=QType.A,
-                qclass=QClass.IN,
-                ttl=60,
-                rdlength=4,
-                rdata='8.8.8.8'
-            )
-
-            message = Message(
-                header=header,
-                questions=[question],
-                answers=[answer]
-            )
-
-            udp_socket.sendto(message.serialize(), source)
+            udp_socket.sendto(response.serialize(), source)
         except Exception as e:
             print(f"Error receiving data: {e}")
             break
