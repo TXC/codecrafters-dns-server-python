@@ -10,7 +10,7 @@ Tests for `app.dns`.
 
 import unittest
 from typing import NamedTuple
-from app.dns.types import MessageType, OpCode, ResponseCode, RClass, RType, \
+from app.dns.common import MessageType, OpCode, ResponseCode, RClass, RType, \
      QClass, QType
 from app.dns.rdata import RDATA, RDATA_A
 from app.dns.header import Header, HeaderFlags

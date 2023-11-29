@@ -2,10 +2,12 @@ import struct
 import logging
 import copy
 from dataclasses import dataclass, field
-from app.dns.types import MessageType, OpCode, ResponseCode
+from app.dns.common import MessageType, OpCode, ResponseCode, debug
+from app.dns.exceptions import FormatError, NotImplementedError
+
+logger = logging.getLogger(__name__)
 
 
-@dataclass
 class HeaderFlags:
     #: A one bit field that specifies whether this message is a query (0), or a
     #: response (1).
@@ -38,6 +40,38 @@ class HeaderFlags:
 
     #: Response code - this 4 bit field is set as part of responses.
     rcode: ResponseCode = ResponseCode.NO_ERROR
+
+    def __init__(
+        self,
+        qr: MessageType = MessageType.Query,
+        opcode: OpCode = OpCode.QUERY,
+        aa: int = 0,
+        tc: int = 0,
+        rd: int = 0,
+        ra: int = 0,
+        z: int = 0,
+        rcode: ResponseCode = ResponseCode.NO_ERROR,
+    ):
+        if not isinstance(qr, MessageType):
+            raise FormatError('Invalid MessageType (qr)')
+
+        if not isinstance(opcode, OpCode):
+            raise FormatError('Invalid Operation Code (opcode)')
+
+        if not isinstance(rcode, ResponseCode):
+            raise FormatError('Invalid Response Code (rcode)')
+
+        if opcode != OpCode.QUERY:
+            raise NotImplementedError
+
+        self.qr: MessageType = qr
+        self.opcode: OpCode = opcode
+        self.aa: int = aa
+        self.tc: int = tc
+        self.rd: int = rd
+        self.ra: int = ra
+        self.z: int = z
+        self.rcode: ResponseCode = rcode
 
     def __index__(self) -> int:
         return (
@@ -86,6 +120,24 @@ class HeaderFlags:
         _z: int = (data[1] & 0b01110000) >> 4
         #: bits 5-8 of byte 4
         _rcode: int = (data[1] & 0b00001111)
+
+        try:
+            _qr = MessageType(_qr)
+        except ValueError:
+            raise NotImplementedError('Message Type not supported')
+
+        try:
+            _opcode = OpCode(_opcode)
+        except ValueError:
+            raise NotImplementedError('OpCode not supported')
+
+        try:
+            _rcode = ResponseCode(_rcode)
+        except ValueError:
+            raise NotImplementedError('Response Code not supported')
+
+        debug(qr=_qr, opcode=_opcode, aa=_aa, tc=_tc, rd=_rd, ra=_ra, z=_z,
+              rcode=_rcode, data=data, offset=0)
 
         return cls(
             qr=MessageType(_qr),
@@ -176,7 +228,7 @@ class Header:
         import random
         _id = random.randint(0x0000, 0xFFFF)
 
-        logging.info('Creating empty Header with ID: {_id}')
+        logger.info('Creating empty Header with ID: {_id}')
         return cls(
             id=_id,
             flags=HeaderFlags.empty(),

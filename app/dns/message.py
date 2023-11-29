@@ -1,12 +1,14 @@
 import copy
 import logging
 from dataclasses import dataclass, field
-from app.dns.types import MessageType
+from app.dns.common import MessageType, debug
 from app.dns.header import Header
-from app.dns.record import Query, Record
+from app.dns.record import BaseRecord, Query, Record
 
 HeaderSections = list[Query] | list[Record]
 SectionResponse = dict[str, HeaderSections]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -44,7 +46,7 @@ class Message:
 
     def serialize(self) -> bytes:
         if not isinstance(self.header, Header):
-            logging.error('Missing Header object')
+            logger.error('Missing Header object')
             raise AttributeError(
                 'Missing Header',
                 name='header',
@@ -52,7 +54,7 @@ class Message:
             )
 
         if not isinstance(self.queries, list):
-            logging.error('Missing Query object')
+            logger.error('Missing Query object')
             raise AttributeError(
                 'Missing Query',
                 name='header',
@@ -63,10 +65,10 @@ class Message:
             section = getattr(self, key)
             section_size = len(section)
             if section_size < 1:
-                logging.info(f'Section {key} has no value')
+                logger.info(f'Section {key} has no value')
                 continue
 
-            logging.info(
+            logger.info(
                 f'Assigning size of {section} ({section_size}) to {key}'
             )
             setattr(self.header, count, section_size)
@@ -75,24 +77,24 @@ class Message:
 
         for key in Message.sections:
             section = getattr(self, key)
-            logging.info(f'Serializing section: {key}')
+            logger.info(f'Serializing section: {key}')
             for q in section:
                 try:
                     res += q.serialize()
                 except Exception as e:
-                    logging.exception(e)
+                    logger.exception(e)
                     raise e
         return res
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "Message":
-        logging.info('Got {} bytes'.format(len(data)))
+        debug(data=data)
         header = Header.from_bytes(data[:12])
 
         try:
             container = cls._build_sections(data, header, 12)
         except AttributeError as e:
-            logging.exception(e)
+            logger.exception(e)
             raise e
 
         return cls(header=header, **container)
@@ -106,7 +108,7 @@ class Message:
             if message.answers is None:
                 message.answers = []
 
-            logging.info(f'Creating response for {query.name}')
+            logger.info(f'Creating response for {query.name}')
             record = Record.lookup(query=query)
             message.answers.append(record)
             message.header.ancount += 1
@@ -118,14 +120,16 @@ class Message:
                         position: int = 12) -> SectionResponse:
 
         container: dict[str, list[Query | Record]] = {}
-        position = 12
         for key, count in Message.sections.items():
             if key not in container:
                 container[key] = []
 
-            logging.info(f'Checking {key}...')
+            logger.info(f'Checking Header.{key}...')
 
             ranger = getattr(header, count)
+
+            logger.info(f'Header.{key} reports {ranger} record(s)')
+
             cls = Record
             if key == 'queries':
                 cls = Query
@@ -137,11 +141,16 @@ class Message:
                     )
 
             if ranger > 0:
-                logging.info(f'Building {ranger} record(s) for {key}...')
+                logger.info(f'Building {ranger} record(s) for Header.{key}...')
                 for _ in range(ranger):
-                    inst = getattr(cls, 'from_bytes')
-                    query = inst(data[position:])
-                    container[key].append(query)
-                    position += len(query)
+                    try:
+                        inst = getattr(cls, 'from_bytes')
+                        rr: BaseRecord = inst(data[position:])
+                        container[key].append(rr)
+                        position += rr.bytes_read
+                    except NotImplementedError as e:
+                        setattr(header, count, ranger - 1)
+                        logger.warning(e)
+                        continue
 
         return container

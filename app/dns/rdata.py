@@ -1,8 +1,10 @@
 import logging
-import copy
+# import copy
 from dataclasses import dataclass
 from app.dns.encoding import Encoding
-from app.dns.types import RType, DomainName, CharacterString
+from app.dns.common import RType, DomainName, CharacterString
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -29,7 +31,7 @@ class RDATA:
     def factory(t: RType, *args) -> 'RDATA':
         obj_path = RDATA.get_callable(t)
         obj: RDATA = obj_path()
-        logging.info(f'Matched \'RType.{t.name}\' to \'{obj_path}\'')
+        logger.info(f'Matched \'RType.{t.name}\' to \'{obj_path}\'')
 
         obj_annotations = getattr(obj, '__annotations__')
         if len(obj_annotations) > 0:

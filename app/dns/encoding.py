@@ -1,7 +1,11 @@
+import logging
+from app.dns.exceptions import FormatError
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from app.dns.types import CharacterString, DomainName
+    from app.dns.common import CharacterString, DomainName
+
+logger = logging.getLogger(__name__)
 
 
 class Encoding:
@@ -12,6 +16,12 @@ class Encoding:
         res = b''
         for part in parts:
             ascii_part = part.encode('ascii')
+            part_length = len(ascii_part)
+            if part_length >= 63:
+                raise FormatError(
+                    'Part \'{}\' of \'{}\' exceeds limit of 63 chars'
+                    .format(part, '.'.join(parts))
+                )
             res += len(ascii_part).to_bytes(1, 'big') + ascii_part
 
         res = res + b'\x00'
@@ -63,9 +73,18 @@ class Encoding:
                 break
 
             length = int.from_bytes(data[i:i+1], 'big')
+            if length >= 63:
+                raise FormatError(
+                    'Length exceeds part limit of 63 chars'
+                )
+
             i += 1
             qname += data[i:i + length].decode('utf-8') + '.'
             i += length
+
+        # Check if label size is zero
+        if len(qname) < 1:
+            return qname, i
 
         if qname[-1] == '.':
             qname = qname[0:-1]
