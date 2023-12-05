@@ -166,9 +166,9 @@ class Message:
                 for _ in range(ranger):
                     try:
                         if key == 'queries':
-                            record = Query.from_bytes(data[position:])
+                            record = Query.from_bytes(data, position)
                         else:
-                            record = BaseRecord.factory(data[position:])
+                            record = BaseRecord.factory(data, position)
 
                         container[key].append(record)
                         position += record.bytes_read
