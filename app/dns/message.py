@@ -1,12 +1,12 @@
 import copy
 import logging
 from dataclasses import dataclass, field
-from app.dns.common import MessageType, debug
+from app.dns.common import debug, ResponseCode
+from app.dns.exceptions import NotImplementedError
 from app.dns.header import Header
-from app.dns.record import BaseRecord, Query, Record
+from app.dns.record import ResourceRecord, Query, Record, BaseRecord
 
-HeaderSections = list[Query] | list[Record]
-SectionResponse = dict[str, HeaderSections]
+SectionResponse = dict[str, list[Record]]
 
 logger = logging.getLogger(__name__)
 
@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Message:
     header: Header | None = None
-    queries: list[Query] = field(default_factory=[])
-    answers: list[Record] = field(default_factory=[])
-    authorities: list[Record] = field(default_factory=[])
-    additional: list[Record] = field(default_factory=[])
+    queries: list[Record] = field(default_factory=list)
+    answers: list[Record] = field(default_factory=list)
+    authorities: list[Record] = field(default_factory=list)
+    additional: list[Record] = field(default_factory=list)
 
     sections = {
         'queries': 'qdcount',
@@ -44,7 +44,7 @@ class Message:
 
         return result
 
-    def serialize(self) -> bytes:
+    def __bytes__(self) -> bytes:
         if not isinstance(self.header, Header):
             logger.error('Missing Header object')
             raise AttributeError(
@@ -69,22 +69,40 @@ class Message:
                 continue
 
             logger.info(
-                f'Assigning size of {section} ({section_size}) to {key}'
+                f'Assigning size of {key} ({section_size}) to Header.{count}'
             )
             setattr(self.header, count, section_size)
 
-        res = self.header.serialize()
+        res = bytes(self.header)
 
         for key in Message.sections:
-            section = getattr(self, key)
+            section: list[Record] = getattr(self, key)
             logger.info(f'Serializing section: {key}')
             for q in section:
                 try:
-                    res += q.serialize()
+                    res += bytes(q)
                 except Exception as e:
                     logger.exception(e)
                     raise e
         return res
+
+    def serialize(self) -> bytes:
+        return bytes(self)
+
+    def validate(self) -> ResponseCode:
+        header_res = self.header.validate()
+
+        if header_res != ResponseCode.NO_ERROR:
+            return header_res
+
+        for key in Message.sections:
+            section: list[Record] = getattr(self, key)
+            if len(section) > 0:
+                for q in section:
+                    q_res = q.validate()
+                    if q_res != ResponseCode.NO_ERROR:
+                        return q_res
+        return ResponseCode.NO_ERROR
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "Message":
@@ -100,54 +118,60 @@ class Message:
         return cls(header=header, **container)
 
     def create_response(self) -> 'Message':
+        if self.header.flags.qr == 1:
+            logger.error('Can\'t create a response on a response')
+            return self
+
         message = copy.copy(self)
-        # message = copy.deepcopy(self)
-        message.header.flags.qr = MessageType.Response
+        message.header.flags.qr = 1
+
+        res = self.validate()
+        if res != ResponseCode.NO_ERROR:
+            message.header.flags.rcode = res.value
+            return message
 
         for query in message.queries:
-            if message.answers is None:
-                message.answers = []
-
             logger.info(f'Creating response for {query.name}')
-            record = Record.lookup(query=query)
+            record = ResourceRecord.lookup(query=query)
             message.answers.append(record)
             message.header.ancount += 1
 
+        # mres = message.validate()
+        # if mres != ResponseCode.NO_ERROR:
+        #     message.header.flags.rcode = mres
         return message
 
     @staticmethod
     def _build_sections(data: bytes, header: Header,
                         position: int = 12) -> SectionResponse:
 
-        container: dict[str, list[Query | Record]] = {}
+        container: SectionResponse = {}
         for key, count in Message.sections.items():
             if key not in container:
                 container[key] = []
-
-            logger.info(f'Checking Header.{key}...')
 
             ranger = getattr(header, count)
 
             logger.info(f'Header.{key} reports {ranger} record(s)')
 
-            cls = Record
-            if key == 'queries':
-                cls = Query
-                if ranger < 1:
-                    raise AttributeError(
-                        f'Attribute ({count}) requires a positive value',
-                        name=count,
-                        object=header,
-                    )
+            if key == 'queries' and ranger < 1:
+                raise AttributeError(
+                    f'Attribute ({count}) requires a positive value',
+                    name=count,
+                    object=header,
+                )
 
             if ranger > 0:
                 logger.info(f'Building {ranger} record(s) for Header.{key}...')
                 for _ in range(ranger):
                     try:
-                        inst = getattr(cls, 'from_bytes')
-                        rr: BaseRecord = inst(data[position:])
-                        container[key].append(rr)
-                        position += rr.bytes_read
+                        if key == 'queries':
+                            record = Query.from_bytes(data[position:])
+                        else:
+                            record = BaseRecord.factory(data[position:])
+
+                        container[key].append(record)
+                        position += record.bytes_read
                     except NotImplementedError as e:
                         setattr(header, count, ranger - 1)
                         logger.warning(e)

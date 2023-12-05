@@ -2,8 +2,7 @@ import struct
 import logging
 import copy
 from dataclasses import dataclass, field
-from app.dns.common import MessageType, OpCode, ResponseCode, debug
-from app.dns.exceptions import FormatError, NotImplementedError
+from app.dns.common import OpCode, ResponseCode, debug
 
 logger = logging.getLogger(__name__)
 
@@ -11,96 +10,105 @@ logger = logging.getLogger(__name__)
 class HeaderFlags:
     #: A one bit field that specifies whether this message is a query (0), or a
     #: response (1).
-    qr: MessageType = MessageType.Query
+    qr: int
 
     #: A four bit field that specifies kind of query in this message. This
     #: value is set by the originator of a query and copied into the response.
-    opcode: OpCode = OpCode.QUERY
+    opcode: int
 
     #: Authoritative Answer - this bit is valid in responses, and specifies
     #: that the responding name server is an authority for the domain name in
     #: question section.
-    aa: int = 0
+    aa: int
 
     #: TrunCation - specifies that this message was truncated due to length
     #: greater than that permitted on the transmission channel.
-    tc: int = 0
+    tc: int
 
     #: Recursion Desired - this bit may be set in a query and is copied into
     #: the response.  If RD is set, it directs the name server to pursue the
     #: query recursively. Recursive query support is optional.
-    rd: int = 0
+    rd: int
 
     #: Recursion Available - this be is set or cleared in a response, and
     #: denotes whether recursive query support is available in the name server.
-    ra: int = 0
+    ra: int
 
     #: Reserved for future use.  Must be zero in all queries and responses.
-    z: int = 0
+    z: int
 
     #: Response code - this 4 bit field is set as part of responses.
-    rcode: ResponseCode = ResponseCode.NO_ERROR
+    rcode: int
 
-    def __init__(
-        self,
-        qr: MessageType = MessageType.Query,
-        opcode: OpCode = OpCode.QUERY,
-        aa: int = 0,
-        tc: int = 0,
-        rd: int = 0,
-        ra: int = 0,
-        z: int = 0,
-        rcode: ResponseCode = ResponseCode.NO_ERROR,
-    ):
-        if not isinstance(qr, MessageType):
-            raise FormatError('Invalid MessageType (qr)')
-
-        if not isinstance(opcode, OpCode):
-            raise FormatError('Invalid Operation Code (opcode)')
-
-        if not isinstance(rcode, ResponseCode):
-            raise FormatError('Invalid Response Code (rcode)')
-
-        if opcode != OpCode.QUERY:
-            raise NotImplementedError
-
-        self.qr: MessageType = qr
-        self.opcode: OpCode = opcode
+    def __init__(self, qr: int = 0, opcode: int = 0, aa: int = 0, tc: int = 0,
+                 rd: int = 0, ra: int = 0, z: int = 0, rcode: int = 0):
+        self.qr: int = qr
+        self.opcode: int = opcode
         self.aa: int = aa
         self.tc: int = tc
         self.rd: int = rd
         self.ra: int = ra
         self.z: int = z
-        self.rcode: ResponseCode = rcode
+        self.rcode: int = rcode
 
     def __index__(self) -> int:
         return (
-            (self.qr.value << 15)
-            | (self.opcode.value << 11)
+            (self.qr << 15)
+            | (self.opcode << 11)
             | (self.aa << 10)
             | (self.tc << 9)
             | (self.rd << 8)
             | (self.ra << 7)
             | (self.z << 4)
-            | self.rcode.value
+            | self.rcode
         )
 
     def __bytes__(self) -> bytes:
-        return self.serialize()
+        return struct.pack('>H', int(self))
 
-    def __copy__(self) -> 'HeaderFlags':
-        cls = self.__class__
-        result = cls.__new__(cls)
-        result.qr = MessageType(self.qr.value)
-        result.opcode = OpCode(self.opcode.value)
-        result.aa = self.aa
-        result.tc = self.tc
-        result.rd = self.rd
-        result.ra = self.ra
-        result.z = self.z
-        result.rcode = ResponseCode(self.rcode.value)
+    def __repr__(self) -> str:
+        op = OpCode.safe_get_name_by_value(self.opcode)
+        rcode = ResponseCode.safe_get_name_by_value(self.rcode)
 
-        return result
+        m = f'OPC: {op}, status: {rcode}, flags: '
+
+        if self.qr == 1:
+            m += ' qr'
+
+        if self.aa == 1:
+            m += ' aa'
+
+        if self.tc == 1:
+            m += ' tc'
+
+        if self.rd == 1:
+            m += ' rd'
+
+        if self.ra == 1:
+            m += ' ra'
+
+        if self.z != 0:
+            m += ' ZZ'
+
+        return m
+
+    def serialize(self) -> bytes:
+        return bytes(self)
+
+    def validate(self) -> ResponseCode:
+        if self.z != 0:
+            logger.error('Header Z must be 0')
+            return ResponseCode.FORMAT_ERROR
+
+        if not OpCode.value_exists(self.opcode):
+            logger.error(f'OpCode ({self.opcode}) not supported')
+            return ResponseCode.NOT_IMPLEMENTED
+
+        if not ResponseCode.value_exists(self.opcode):
+            logger.error(f'Response Code ({self.rcode}) not supported')
+            return ResponseCode.NOT_IMPLEMENTED
+
+        return ResponseCode.NO_ERROR
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "HeaderFlags":
@@ -121,50 +129,15 @@ class HeaderFlags:
         #: bits 5-8 of byte 4
         _rcode: int = (data[1] & 0b00001111)
 
-        try:
-            _qr = MessageType(_qr)
-        except ValueError:
-            raise NotImplementedError('Message Type not supported')
-
-        try:
-            _opcode = OpCode(_opcode)
-        except ValueError:
-            raise NotImplementedError('OpCode not supported')
-
-        try:
-            _rcode = ResponseCode(_rcode)
-        except ValueError:
-            raise NotImplementedError('Response Code not supported')
-
         debug(qr=_qr, opcode=_opcode, aa=_aa, tc=_tc, rd=_rd, ra=_ra, z=_z,
               rcode=_rcode, data=data, offset=0)
 
-        return cls(
-            qr=MessageType(_qr),
-            opcode=OpCode(_opcode),
-            aa=_aa,
-            tc=_tc,
-            rd=_rd,
-            ra=_ra,
-            z=_z,
-            rcode=ResponseCode(_rcode)
-        )
+        return cls(qr=_qr, opcode=_opcode, aa=_aa, tc=_tc, rd=_rd, ra=_ra,
+                   z=_z, rcode=_rcode)
 
     @classmethod
     def empty(cls) -> "HeaderFlags":
-        return cls(
-            qr=MessageType.Query,
-            opcode=OpCode.QUERY,
-            aa=0,
-            tc=0,
-            rd=0,
-            ra=0,
-            z=0,
-            rcode=ResponseCode.NO_ERROR,
-        )
-
-    def serialize(self) -> bytes:
-        return struct.pack('>H', int(self))
+        return cls(qr=0, opcode=0, aa=0, tc=0, rd=0, ra=0, z=0, rcode=0,)
 
 
 @dataclass
@@ -194,7 +167,15 @@ class Header:
     arcount: int = 0
 
     def __bytes__(self) -> bytes:
-        return self.serialize()
+        return struct.pack(
+            '>HHHHHH',
+            self.id,
+            self.flags,
+            self.qdcount,
+            self.ancount,
+            self.nscount,
+            self.arcount,
+        )
 
     def __copy__(self) -> 'Header':
         cls = self.__class__
@@ -207,6 +188,17 @@ class Header:
         result.arcount = self.arcount
 
         return result
+
+    def __repr__(self) -> str:
+        return f'id: 0x{self.id:0>4x} / {self.id} - QUERY: {self.qdcount} '\
+               f'ANSWER: {self.ancount} AUTHORITY: {self.nscount} '\
+               f'ADDITIONAL: {self.arcount}'
+
+    def serialize(self) -> bytes:
+        return bytes(self)
+
+    def validate(self) -> ResponseCode:
+        return self.flags.validate()
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "Header":
@@ -236,15 +228,4 @@ class Header:
             ancount=0,
             nscount=0,
             arcount=0,
-        )
-
-    def serialize(self) -> bytes:
-        return struct.pack(
-            '>HHHHHH',
-            self.id,
-            self.flags,
-            self.qdcount,
-            self.ancount,
-            self.nscount,
-            self.arcount,
         )

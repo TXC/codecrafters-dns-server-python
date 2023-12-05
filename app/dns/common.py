@@ -127,7 +127,79 @@ def stringify_bytes(value: bytes, offset: int = 0) -> str:
     return p
 
 
-class RClass(enum.Enum):
+def get_random_ttl() -> int:
+    import random
+    ttl_values = [60, 300, 1800, 3600, 7200, 14400, 43200, 86400]
+    return random.choice(ttl_values)
+
+
+def setUpRootLogger(level: int = 0) -> logging.Logger:
+    import sys
+    if level not in [logging.CRITICAL, logging.ERROR, logging.WARNING,
+                     logging.INFO, logging.DEBUG,]:
+        level = logging.DEBUG
+
+    root = logging.getLogger()
+    root.setLevel(level)
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(level)
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    )
+    handler.setFormatter(formatter)
+    root.addHandler(handler)
+    return root
+
+
+def exist_in_enum(value, enum_class: enum.Enum):
+    values = set(item.value for item in enum_class)
+    if value in values:
+        return True
+    return False
+
+
+class EnumExtension(enum.Enum):
+    @classmethod
+    def value_exists(cls, value) -> bool:
+        values = set(item.value for item in cls)
+        if value in values:
+            return True
+        return False
+
+    @classmethod
+    def name_exists(cls, name) -> bool:
+        names = set(item.name for item in cls)
+        if name in names:
+            return True
+        return False
+
+    @classmethod
+    def safe_get_value_by_value(cls, key, default=None):
+        if cls.value_exists(key):
+            return cls(key).value
+        return key if default is None else default
+
+    @classmethod
+    def safe_get_name_by_value(cls, key, default=None):
+        if cls.value_exists(key):
+            return cls(key).name
+        return key if default is None else default
+
+    @classmethod
+    def safe_get_value_by_name(cls, key, default=None):
+        if cls.name_exists(key):
+            return cls[key].name
+        return key if default is None else default
+
+    @classmethod
+    def safe_get_name_by_name(cls, key, default=None):
+        if cls.name_exists(key):
+            return cls[key].name
+        return key if default is None else default
+
+
+class RClass(EnumExtension):
     """Record Class"""
 
     #: the Internet
@@ -144,14 +216,14 @@ class RClass(enum.Enum):
     HS = 4
 
 
-class QClass(enum.Enum):
+class QClass(EnumExtension):
     """Query Class"""
 
     #: Any class
     ANY = 255
 
 
-class RType(enum.Enum):
+class RType(EnumExtension):
     """Record Type"""
 
     #: a host address
@@ -250,7 +322,7 @@ class RType(enum.Enum):
     DLV = 32769
 
 
-class QType(enum.Enum):
+class QType(EnumExtension):
     """Query Class"""
 
     #: A request for a transfer of an entire zone
@@ -266,28 +338,20 @@ class QType(enum.Enum):
     ANY = 255
 
 
-class MessageType(enum.Enum):
-    #: Message is a Query
-    Query = 0
-
-    #: Message is a Response
-    Response = 1
-
-
-class OpCode(enum.Enum):
+class OpCode(EnumExtension):
     #: a standard query (QUERY)
     QUERY = 0
 
     #: an inverse query (IQUERY)
-    IQUERY = 1
+    # IQUERY = 1
 
     #: a server status request (STATUS)
-    STATUS = 2
+    # STATUS = 2
 
     #: 3-15            reserved for future use
 
 
-class ResponseCode(enum.Enum):
+class ResponseCode(EnumExtension):
     NO_ERROR = 0b0000
     """No error condition"""
 
