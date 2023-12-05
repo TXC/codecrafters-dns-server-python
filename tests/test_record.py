@@ -9,9 +9,9 @@ class TestDNSRecord(TestDNS):
         for source in self.subtests:
             testdata, bytedata = source
             with self.subTest(f'{testdata!r}'):
-                question = Query.from_bytes(bytedata.name
-                                            + bytedata.type
-                                            + bytedata.klass)
+                question, _ = Query.from_bytes(bytedata.name
+                                               + bytedata.type
+                                               + bytedata.klass)
 
                 res = question.validate()
                 self.assertIsInstance(res, ResponseCode)

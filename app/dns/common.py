@@ -127,6 +127,19 @@ def stringify_bytes(value: bytes, offset: int = 0) -> str:
     return p
 
 
+def get_random_ip() -> int:
+    import random
+    range_values = range(0, 255)
+    str = '{}.{}.{}.{}'
+    str = str.format(
+        random.choice(range_values),
+        random.choice(range_values),
+        random.choice(range_values),
+        random.choice(range_values),
+    )
+    return str
+
+
 def get_random_ttl() -> int:
     import random
     ttl_values = [60, 300, 1800, 3600, 7200, 14400, 43200, 86400]

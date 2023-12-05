@@ -76,33 +76,35 @@ class BaseRecord:
         return ResponseCode.NO_ERROR
 
     @classmethod
-    def from_bytes(cls, data: bytes, offset: int = 0) -> "BaseRecord":
+    def from_bytes(
+        cls, data: bytes, offset: int = 0
+    ) -> tuple["BaseRecord", int]:
         debug('Base Payload', data=data)
 
-        name, offset = Encoding.decode_domain_name(data, offset=offset)
+        name, i = Encoding.decode_domain_name(data, offset=offset)
 
-        _type = int.from_bytes(data[offset:offset + 2], 'big')
-        offset += 2
+        _type = int.from_bytes(data[i:i + 2], 'big')
+        i += 2
 
         obj = cls.__new__(cls)
         obj.name = name
         obj.type = _type
-        obj.bytes_read = offset
-        return obj
+        obj.bytes_read = i - offset
+        return obj, i
 
     @classmethod
-    def factory(cls, data: bytes, offset: int = 0) -> 'BaseRecord':
-        name, offset = Encoding.decode_domain_name(data, offset=offset)
+    def factory(cls, data: bytes, offset: int = 0) -> tuple['BaseRecord', int]:
+        name, i = Encoding.decode_domain_name(data, offset=offset)
 
-        _type = int.from_bytes(data[offset:offset + 2], 'big')
-        offset += 2
+        _type = int.from_bytes(data[i:i + 2], 'big')
+        i += 2
 
         if not RType.value_exists(_type):
             obj = cls.__new__(cls)
             obj.name = name
             obj.type = _type
-            obj.bytes_read = offset
-            return obj
+            obj.bytes_read = i - offset
+            return obj, i
 
         t = RType(_type)
 
@@ -185,12 +187,11 @@ class Record(BaseRecord):
         return ResponseCode.NO_ERROR
 
     @classmethod
-    def from_bytes(cls, data: bytes, offset: int = 0) -> 'Record':
-        newcls = super(Record, cls).from_bytes(data, offset=offset)
+    def from_bytes(cls, data: bytes, offset: int = 0) -> tuple['Record', int]:
+        newcls, i = super(Record, cls).from_bytes(data, offset=offset)
 
-        offset = newcls.bytes_read
-        klass = int.from_bytes(data[offset:offset + 2], 'big')
-        offset += 2
+        klass = int.from_bytes(data[i:i + 2], 'big')
+        i += 2
 
         debug('RR', qn=newcls.name, qt=newcls.type, qc=klass)
 
@@ -198,8 +199,8 @@ class Record(BaseRecord):
         obj.name = newcls.name
         obj.type = newcls.type
         obj.klass = klass
-        obj.bytes_read = offset
-        return obj
+        obj.bytes_read = i - offset
+        return obj, i
 
 
 class Query(Record):
@@ -314,18 +315,19 @@ class ResourceRecord(Record):
         return res
 
     @classmethod
-    def from_bytes(cls, data: bytes, offset: int = 0) -> 'ResourceRecord':
-        newcls = super(ResourceRecord, cls).from_bytes(data, offset=offset)
+    def from_bytes(
+        cls, data: bytes, offset: int = 0
+    ) -> tuple['ResourceRecord', int]:
+        newcls, i = super(ResourceRecord, cls).from_bytes(data, offset=offset)
 
-        offset = newcls.bytes_read
-        ttl = int.from_bytes(data[offset:offset + 4], 'big')
-        offset += 4
+        ttl = int.from_bytes(data[i:i + 4], 'big')
+        i += 4
 
-        rdlength = int.from_bytes(data[offset:offset + 2], 'big')
-        offset += 2
+        rdlength = int.from_bytes(data[i:i + 2], 'big')
+        i += 2
 
-        rdata = cls.decode_rdata(data[offset:offset + rdlength])
-        offset += rdlength
+        rdata = cls.decode_rdata(data[i:i + rdlength])
+        i += rdlength
 
         obj = cls.__new__(cls)
         obj.name = newcls.name
@@ -334,8 +336,8 @@ class ResourceRecord(Record):
         obj.ttl = ttl
         obj.rdlength = rdlength
         obj.rdata = rdata
-        obj.bytes_read = offset
-        return obj
+        obj.bytes_read = i - offset
+        return obj, i
 
     @classmethod
     def lookup(cls, query: Query) -> 'ResourceRecord':

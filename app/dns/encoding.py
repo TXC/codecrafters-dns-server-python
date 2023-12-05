@@ -72,22 +72,23 @@ class Encoding:
         parts = []
         while True:
             length = int.from_bytes(data[i:i+1], 'big')
-            if ((i + 1) + length) > len(data):
-                break
 
             if data[i] == 0x00:
                 i += 1
                 break
             # Check if the first two bits are set
-            elif (length & 0xc000 == 0xc000):
-                pointer = struct.unpack("!H", data[i:2])[0]
+            elif (length & 0xc0 == 0xc0):
+                pointer = struct.unpack("!H", data[i:i+2])[0]
                 pointer &= 0x3fff  # Clear the first two bits
                 i += 2
-                name = Encoding.decode_domain_name(data, i + pointer)
+                name = Encoding.decode_domain_name(data, pointer)[0]
                 parts.append(name)
                 break
             else:
                 i += 1
+                if (i + length) > len(data):
+                    break
+
                 payload = data[i:i + length]
                 try:
                     name = payload.decode('utf-8')
