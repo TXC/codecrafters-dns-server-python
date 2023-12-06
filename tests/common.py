@@ -1,5 +1,5 @@
 import unittest
-from typing import NamedTuple
+from typing import NamedTuple, Any
 from app.dns.common import RClass, RType
 from app.dns.rdata import RDATA
 
@@ -10,7 +10,7 @@ class TestData(NamedTuple):
     klass: RClass
     ttl: int
     rdlength: int
-    rdata: RDATA
+    rdata: Any | RDATA
 
 
 class ByteData(NamedTuple):

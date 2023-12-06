@@ -3,12 +3,12 @@
 # imported for _GLOBAL_DEFAULT_TIMEOUT
 import sys
 import socket as socket_module
-from typing import TYPE_CHECKING, overload
+from typing import TYPE_CHECKING, overload, Any
 
 _FD = int | str | bytes
 WriteableBuffer = int | str | bytes
 ReadableBuffer = int | str | bytes
-_Address = int | str | bytes
+_Address = tuple[Any, ...] | int | str | bytes
 _RetAddress = int | str | bytes
 
 if TYPE_CHECKING:
@@ -58,6 +58,12 @@ class MockFile:
 class MockSocket:
     """Mock socket object
     """
+    #: List of bytes that are sent to us
+    output: list = []
+
+    #: List of bytes that are recieved from us
+    lines: list = []
+
     def __init__(self, family: int = None, type: int = None,
                  proto: int = None, fileno: _FD = None) -> None:
         global _reply_data
@@ -95,7 +101,10 @@ class MockSocket:
         if len(self.lines) < 1:
             return b''
 
-        data = self.lines.pop(0) + b'\r\n'
+        data = self.lines.pop(0)
+        if not isinstance(data, bytes):
+            data = bytes(data)
+        data += b'\r\n'
         return data
 
     def recvfrom(self, bufsize: int,
@@ -103,7 +112,10 @@ class MockSocket:
         if len(self.lines) < 1:
             return (b'', self.getpeername())
 
-        data = self.lines.pop(0) + b'\r\n'
+        data = self.lines.pop(0)
+        if not isinstance(data, bytes):
+            data = bytes(data)
+        data += b'\r\n'
         return (data, self.getpeername())
 
     def recvfrom_into(self, buffer: WriteableBuffer, nbytes: int = None,
@@ -111,7 +123,11 @@ class MockSocket:
         if len(self.lines) < 1:
             return (0, self.getpeername())
 
-        data = self.lines.pop(0) + b'\r\n'
+        data = self.lines.pop(0)
+        if not isinstance(data, bytes):
+            data = bytes(data)
+        data += b'\r\n'
+
         if nbytes is None:
             nbytes = len(data)
         buffer.append(data)
@@ -122,7 +138,11 @@ class MockSocket:
         if len(self.lines) < 1:
             return 0
 
-        data = self.lines.pop(0) + b'\r\n'
+        data = self.lines.pop(0)
+        if not isinstance(data, bytes):
+            data = bytes(data)
+        data += b'\r\n'
+
         if nbytes is None:
             nbytes = len(data)
         buffer.append(data)

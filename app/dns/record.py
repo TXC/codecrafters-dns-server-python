@@ -280,7 +280,7 @@ class ResourceRecord(Record):
                 setattr(self, name, value)
 
         if self.rdata is not None:
-            self.rdata = RDATA.factory(self.type, self.rdata)
+            self.rdata = RDATA.factory(record_type=self.type, data=self.rdata)
 
     def __copy__(self) -> 'ResourceRecord':
         cls = self.__class__
@@ -320,14 +320,13 @@ class ResourceRecord(Record):
     ) -> tuple['ResourceRecord', int]:
         newcls, i = super(ResourceRecord, cls).from_bytes(data, offset=offset)
 
+        length = len(data)
+
         ttl = int.from_bytes(data[i:i + 4], 'big')
         i += 4
 
         rdlength = int.from_bytes(data[i:i + 2], 'big')
         i += 2
-
-        rdata = cls.decode_rdata(data[i:i + rdlength])
-        i += rdlength
 
         obj = cls.__new__(cls)
         obj.name = newcls.name
@@ -335,7 +334,13 @@ class ResourceRecord(Record):
         obj.klass = newcls.klass
         obj.ttl = ttl
         obj.rdlength = rdlength
-        obj.rdata = rdata
+
+        obj.rdata = None
+        if (i + rdlength) <= length:
+            d = data[i:i + rdlength]
+            obj.rdata = obj.decode_rdata(d)
+            i += rdlength
+
         obj.bytes_read = i - offset
         return obj, i
 
@@ -355,7 +360,7 @@ class ResourceRecord(Record):
             return RDATA()
 
         if not isinstance(self.rdata, RDATA):
-            self.rdata = RDATA.get_callable(self.type)
+            self.rdata, _ = RDATA.get_callable(self.type)
 
         return self.rdata.decode(data)
 

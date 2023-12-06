@@ -5,6 +5,7 @@ from typing import NewType
 
 DomainName = NewType('DomainName', str)
 CharacterString = NewType('CharacterString', str)
+_Address = tuple[str, int] | str
 
 
 def debug(message: str = '', *args: tuple, **kwarg: dict) -> None:
@@ -147,21 +148,24 @@ def get_random_ttl() -> int:
 
 
 def setUpRootLogger(level: int = 0) -> logging.Logger:
-    import sys
-    if level not in [logging.CRITICAL, logging.ERROR, logging.WARNING,
-                     logging.INFO, logging.DEBUG,]:
-        level = logging.DEBUG
-
     root = logging.getLogger()
-    root.setLevel(level)
 
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(level)
-    formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    )
-    handler.setFormatter(formatter)
-    root.addHandler(handler)
+    if not root.hasHandlers():
+        import sys
+
+        if level not in [logging.CRITICAL, logging.ERROR, logging.WARNING,
+                         logging.INFO, logging.DEBUG,]:
+            level = logging.DEBUG
+
+        root.setLevel(level)
+
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setLevel(level)
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        )
+        handler.setFormatter(formatter)
+        root.addHandler(handler)
     return root
 
 

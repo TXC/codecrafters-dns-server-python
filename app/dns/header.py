@@ -67,25 +67,10 @@ class HeaderFlags:
         return struct.pack('>H', int(self))
 
     def __repr__(self) -> str:
-        op = OpCode.safe_get_name_by_value(self.opcode)
-        rcode = ResponseCode.safe_get_name_by_value(self.rcode)
-
-        m = f'OPC: {op}, status: {rcode}, flags: '
-
-        if self.qr == 1:
-            m += ' qr'
-
-        if self.aa == 1:
-            m += ' aa'
-
-        if self.tc == 1:
-            m += ' tc'
-
-        if self.rd == 1:
-            m += ' rd'
-
-        if self.ra == 1:
-            m += ' ra'
+        m = ''
+        for f in ['qr', 'aa', 'tc', 'rd', 'ra',]:
+            if getattr(self, f) == 1:
+                m += f' {f}'
 
         if self.z != 0:
             m += ' ZZ'
@@ -112,28 +97,20 @@ class HeaderFlags:
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "HeaderFlags":
-        #: first bit of byte 3
-        _qr: int = (data[0] & 0b10000000) >> 7
-        #: bits 2-5 of byte 3
-        _opcode: int = (data[0] & 0b01111000) >> 3
-        #: bit 6 of byte 3
-        _aa: int = (data[0] & 0b00000100) >> 2
-        #: bit 7 of byte 3
-        _tc: int = (data[0] & 0b00000010) >> 1
-        #: bit 8 of byte 3
-        _rd: int = (data[0] & 0b00000001)
-        #: first bit of byte 4
-        _ra: int = (data[1] & 0b10000000) >> 7
-        #: bits 2-4 of byte 4 (3 unused bits)
-        _z: int = (data[1] & 0b01110000) >> 4
-        #: bits 5-8 of byte 4
-        _rcode: int = (data[1] & 0b00001111)
+        flag_parameters = {
+            'qr': (data & 0x8000) >> 15,
+            'opcode': (data & 0x7800) >> 11,
+            'aa': (data & 0x0400) >> 10,
+            'tc': (data & 0x0200) >> 9,
+            'rd': (data & 0x0100) >> 8,
+            'ra': (data & 0x0080) >> 7,
+            'z': (data & 0x0070) >> 4,
+            'rcode': (data & 0x000f) >> 0,
+        }
 
-        debug(qr=_qr, opcode=_opcode, aa=_aa, tc=_tc, rd=_rd, ra=_ra, z=_z,
-              rcode=_rcode, data=data, offset=0)
+        debug(**flag_parameters, data=data, offset=0)
 
-        return cls(qr=_qr, opcode=_opcode, aa=_aa, tc=_tc, rd=_rd, ra=_ra,
-                   z=_z, rcode=_rcode)
+        return cls(**flag_parameters)
 
     @classmethod
     def empty(cls) -> "HeaderFlags":
@@ -169,12 +146,8 @@ class Header:
     def __bytes__(self) -> bytes:
         return struct.pack(
             '>HHHHHH',
-            self.id,
-            self.flags,
-            self.qdcount,
-            self.ancount,
-            self.nscount,
-            self.arcount,
+            self.id, self.flags, self.qdcount, self.ancount,
+            self.nscount, self.arcount,
         )
 
     def __copy__(self) -> 'Header':
@@ -190,9 +163,20 @@ class Header:
         return result
 
     def __repr__(self) -> str:
-        return f'id: 0x{self.id:0>4x} / {self.id} - QUERY: {self.qdcount} '\
-               f'ANSWER: {self.ancount} AUTHORITY: {self.nscount} '\
-               f'ADDITIONAL: {self.arcount}'
+        str_head = ';; ->>HEADER<<- opcode: {}, status: {}, id: {}\n'\
+                   ';; flags:{!r}; QUERY: {}, ANSWER: {}, '\
+                   'AUTHORITY: {}, ADDITIONAL: {}'
+
+        return str_head.format(
+            OpCode.safe_get_name_by_value(self.flags.opcode),
+            ResponseCode.safe_get_name_by_value(self.flags.rcode),
+            self.id,
+            self.flags,
+            self.qdcount,
+            self.ancount,
+            self.nscount,
+            self.arcount
+        )
 
     def serialize(self) -> bytes:
         return bytes(self)
@@ -203,17 +187,14 @@ class Header:
     @classmethod
     def from_bytes(cls, data: bytes) -> "Header":
         #: big endian
-        _id: int = int.from_bytes(data[:2], 'big')
 
-        flags = HeaderFlags.from_bytes(data[2:4])
+        (
+            id, flagbyte, qdcount, ancount, nscount, arcount
+        ) = struct.unpack('>HHHHHH', data[:12])
+        flags = HeaderFlags.from_bytes(flagbyte)
 
-        _qdcount: int = int.from_bytes(data[4:6], 'big')  # 2 bytes
-        _ancount: int = int.from_bytes(data[6:8], 'big')  # 2 bytes
-        _nscount: int = int.from_bytes(data[8:10], 'big')  # 2 bytes
-        _arcount: int = int.from_bytes(data[10:12], 'big')  # 2 bytes
-
-        return cls(id=_id, flags=flags, qdcount=_qdcount, ancount=_ancount,
-                   nscount=_nscount, arcount=_arcount)
+        return cls(id=id, flags=flags, qdcount=qdcount, ancount=ancount,
+                   nscount=nscount, arcount=arcount)
 
     @classmethod
     def empty(cls) -> "Header":

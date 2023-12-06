@@ -1,7 +1,8 @@
 import copy
 import logging
+import socket
 from dataclasses import dataclass, field
-from app.dns.common import debug, ResponseCode
+from app.dns.common import debug, ResponseCode, _Address
 from app.dns.exceptions import NotImplementedError
 from app.dns.header import Header
 from app.dns.record import ResourceRecord, Query, Record, BaseRecord
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Message:
     header: Header | None = None
+    data: bytes = field(default=b'')
     queries: list[Record] = field(default_factory=list)
     answers: list[Record] = field(default_factory=list)
     authorities: list[Record] = field(default_factory=list)
@@ -115,15 +117,14 @@ class Message:
             logger.exception(e)
             raise e
 
-        return cls(header=header, **container)
+        return cls(header=header, data=data, **container)
 
-    def create_response(self) -> 'Message':
+    def create_response(self, resolver: _Address | None = None) -> 'Message':
         if self.header.flags.qr == 1:
             logger.error('Can\'t create a response on a response')
             return self
 
         message = copy.copy(self)
-        message.header.flags.qr = 1
 
         res = self.validate()
         if res != ResponseCode.NO_ERROR:
@@ -131,14 +132,28 @@ class Message:
             return message
 
         for query in message.queries:
-            logger.info(f'Creating response for {query.name}')
-            record = ResourceRecord.lookup(query=query)
-            message.answers.append(record)
-            message.header.ancount += 1
+            if resolver is None:
+                logger.info(f'Creating response for {query.name}')
+                record = ResourceRecord.lookup(query=query)
+                message.answers.append(record)
+            else:
+                logger.info(f'Looking up {query.name}')
+                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                sock.sendto(self.data, resolver)
+                _buf, _ = sock.recvfrom(512)
+                sock.close()
 
-        # mres = message.validate()
-        # if mres != ResponseCode.NO_ERROR:
-        #     message.header.flags.rcode = mres
+                if len(self.data) < len(_buf):
+                    resolved = Message.from_bytes(data=_buf)
+                    if len(resolved.answers) > 0:
+                        for record in resolved.answers:
+                            message.answers.append(record)
+                else:
+                    record = ResourceRecord.lookup(query=query)
+                    message.answers.append(record)
+
+        message.header.flags.qr = 1
+        message.header.ancount = len(message.answers)
         return message
 
     @staticmethod

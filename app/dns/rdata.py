@@ -1,6 +1,7 @@
 import logging
 import struct
-from dataclasses import dataclass
+import enum
+from abc import ABC, abstractmethod
 from app.dns.encoding import Encoding
 from app.dns.exceptions import NotImplementedError
 from app.dns.common import RType, DomainName, CharacterString
@@ -8,8 +9,13 @@ from app.dns.common import RType, DomainName, CharacterString
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class RDATA:
+class RDATA(ABC):
+    __annotations__: dict[str, str] = dict()
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__()
+        self._annotate(kwargs)
+
     @staticmethod
     def get_callable(record_type: int) -> tuple['RDATA', RType]:
         if not RType.value_exists(record_type):
@@ -33,19 +39,45 @@ class RDATA:
         return obj, t
 
     @staticmethod
-    def factory(record_type: int, *args) -> 'RDATA':
+    def factory(record_type: int, **kwargs) -> 'RDATA':
         obj_path, t = RDATA.get_callable(record_type)
         obj: RDATA = obj_path()
         logger.info(f'Matched \'RType.{t.name}\' to \'{obj_path.__name__}\'')
 
-        obj_annotations = getattr(obj, '__annotations__')
-        if len(obj_annotations) > 0:
-            a = 0
-            for name, _type in obj_annotations.items():
-                setattr(obj, name, _type(args[a]))
-                a += 1
+        obj._annotate(kwargs)
         return obj
 
+    def _annotate(self, annotations: dict = {}) -> None:
+        if len(annotations) > 0:
+            for name, value in annotations.items():
+                if isinstance(value, enum.Enum):
+                    value = value.value
+                self.__annotations__[name] = value
+
+    def __getattr__(self, instance, owner=None):
+        annotation = object.__getattribute__(self, '__annotations__')
+        if instance in annotation:
+            return annotation[instance]
+        else:
+            raise AttributeError('Could not find {instance}')
+
+    def __setattr__(self, instance, value):
+        annotation = object.__getattribute__(self, '__annotations__')
+        if instance in annotation:
+            annotation[instance] = value
+            object.__setattr__(self, '__annotations__', annotation)
+        else:
+            raise AttributeError('Could not find {instance}')
+
+    def __delattr__(self, instance):
+        annotation = object.__getattribute__(self, '__annotations__')
+        if instance in annotation:
+            del annotation[instance]
+            object.__setattr__(self, '__annotations__', annotation)
+        else:
+            raise AttributeError('Could not find {instance}')
+
+    @abstractmethod
     def __bytes__(self) -> bytes:
         return b''
 
@@ -54,14 +86,11 @@ class RDATA:
         result = cls.__new__(cls)
 
         obj_annotations = getattr(self, '__annotations__')
-        if len(obj_annotations) > 0:
-            for name, _type in obj_annotations.items():
-                old_value = getattr(self, name)
-                setattr(result, name, _type(old_value))
-
+        result._annotate(obj_annotations)
         return result
 
     @classmethod
+    @abstractmethod
     def decode(cls, data: bytes) -> 'RDATA':
         return cls()
 
@@ -71,10 +100,6 @@ class RDATA_A(RDATA):
 
     def __bytes__(self) -> bytes:
         return Encoding.encode(self.data)
-
-    @classmethod
-    def factory(cls, *args) -> 'RDATA_A':
-        return cls(*args)
 
     @classmethod
     def decode(cls, data: bytes) -> "RDATA_A":
@@ -237,11 +262,7 @@ class RDATA_WKS(RDATA):
         return res
 
     @classmethod
-    def factory(cls, *args) -> 'RDATA_A':
-        return cls(*args)
-
-    @classmethod
-    def decode(cls, data: bytes) -> "RDATA_A":
+    def decode(cls, data: bytes) -> "RDATA_WKS":
         name, i = Encoding.decode_ip(data)
-        protocol = int.from_bytes(data[i:i + 1], 'big')
+        # protocol = int.from_bytes(data[i:i + 1], 'big')
         return cls(data=name)
