@@ -128,6 +128,7 @@ class Message:
 
         res = self.validate()
         if res != ResponseCode.NO_ERROR:
+            message.header.flags.qr = 1
             message.header.flags.rcode = res.value
             return message
 
